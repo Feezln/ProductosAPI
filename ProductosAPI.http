@@ -1,0 +1,36 @@
+@ProductosAPI_HostAddress = http://localhost:5196
+
+GET {{ProductosAPI_HostAddress}}/api/productos
+Accept: application/json
+
+###
+
+GET {{ProductosAPI_HostAddress}}/api/productos/1
+
+###
+
+POST {{ProductosAPI_HostAddress}}/api/productos
+Content-Type: application/json
+
+{
+  "nombre": "Audífonos",
+  "descripcion": "Audífonos bluetooth",
+  "precio": 599.90,
+  "stock": 20
+}
+
+###
+
+PUT {{ProductosAPI_HostAddress}}/api/productos/1
+Content-Type: application/json
+
+{
+  "nombre": "Teclado",
+  "descripcion": "Teclado mecánico RGB",
+  "precio": 899.00,
+  "stock": 12
+}
+
+###
+
+DELETE {{ProductosAPI_HostAddress}}/api/productos/3
