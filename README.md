@@ -54,50 +54,30 @@ Ejemplo de cuerpo para POST y PUT:
 }
 ```
 
-## Flujo dentro del proyecto
+## ¿Cómo funciona mi proyecto?
 
-Cuando alguien hace una petición, por ejemplo desde Swagger, la información pasa por estas capas:
+Hice una API para administrar productos. Se pueden consultar, buscar, agregar, actualizar y eliminar, y todo se guarda en una base de datos de SQL Server. Para conectarme usé ADO.NET y para probarla usé Swagger.
 
-```
-Swagger / Cliente
-      │  petición HTTP (GET, POST, PUT, DELETE)
-      ▼
-Endpoints (ProductosEndpoints.cs)   ← recibe la petición y valida los datos
-      │  llama al método de la interfaz
-      ▼
-IProductoRepository                 ← el contrato: qué se puede hacer
-      │
-      ▼
-ProductoRepository                  ← arma el SQL con parámetros (ADO.NET)
-      │  pide una conexión
-      ▼
-ConexionBD                          ← abre la conexión con la cadena de appsettings.json
-      │
-      ▼
-SQL Server (TiendaDB → Productos)
-```
+### Flujo general
 
-La respuesta regresa por el mismo camino: SQL Server → repositorio (convierte las filas en objetos `Producto`) → endpoint (elige el código HTTP) → Swagger.
+Cuando hago una petición desde Swagger, pasa lo siguiente:
 
-### Paso a paso
+1. La petición llega a **ProductosEndpoints**, donde están las rutas. Aquí también reviso que los datos estén bien, por ejemplo que el producto tenga nombre.
+2. El endpoint llama a un método de **IProductoRepository**, que es la interfaz donde se define qué operaciones se pueden hacer.
+3. **ProductoRepository** es la clase que implementa esa interfaz. Aquí se escribe el SQL.
+4. El repositorio le pide una conexión a **ConexionBD**, que usa la cadena de conexión guardada en `appsettings.json`.
+5. Se ejecuta el SQL en la base de datos y el resultado regresa por el mismo camino hasta Swagger.
 
-1. **Program.cs** registra los servicios al arrancar. `ConexionBD` se registra como *Singleton* (una sola para toda la app) y `ProductoRepository` como *Scoped* (uno por petición). Cuando un endpoint pide `IProductoRepository`, .NET le entrega un `ProductoRepository` automáticamente (inyección de dependencias).
-2. **El endpoint** recibe la petición. Si trae un producto (POST o PUT), primero lo **valida**: nombre obligatorio, precio y stock no negativos. Si algo está mal, responde 400.
-3. **El repositorio** pide una conexión a `ConexionBD`, crea un `SqlCommand` con la instrucción SQL y le agrega **parámetros** (`@id`, `@nombre`...) para evitar la inyección SQL.
-4. **Se ejecuta el comando** según el caso:
-   - `ExecuteReader()` para los SELECT. El `SqlDataReader` lee fila por fila y cada fila se convierte en un `Producto`.
-   - `ExecuteScalar()` para el INSERT. Con `OUTPUT INSERTED.Id` regresa el Id nuevo.
-   - `ExecuteNonQuery()` para UPDATE y DELETE. Regresa cuántas filas cambiaron; si es 0, el producto no existía.
-5. **Se cierra la conexión** sola gracias a `using`.
-6. **El endpoint** elige la respuesta: 200, 201, 204 o 404.
-7. **Si falla la base de datos** (servidor apagado, base inexistente...), se lanza una `SqlException`. El método `Ejecutar` la atrapa con `try/catch` y responde 500 con un mensaje claro, en lugar de que la API truene.
+### Métodos que usé
 
-### Métodos principales
+- **ObtenerTodos:** trae todos los productos. Uso un DataReader para leer fila por fila y guardar cada producto en una lista.
+- **ObtenerPorId:** busca un producto por su id. Si no existe regresa null y la API responde 404.
+- **Insertar:** agrega un producto nuevo y regresa el id que le dio la base de datos.
+- **Actualizar:** cambia los datos de un producto. Regresa true si lo encontró.
+- **Eliminar:** borra un producto por su id. Regresa true si lo borró.
 
-- **`ObtenerTodos()`**: hace `SELECT` de toda la tabla y recorre el `DataReader` con `while (lector.Read())` para llenar una lista.
-- **`ObtenerPorId(id)`**: `SELECT ... WHERE Id = @id`. Si `Read()` encuentra una fila, regresa el producto; si no, regresa `null`.
-- **`Insertar(producto)`**: `INSERT ... OUTPUT INSERTED.Id`. Regresa el Id que generó SQL Server.
-- **`Actualizar(producto)`**: `UPDATE ... WHERE Id = @id`. Regresa `true` si actualizó al menos una fila.
-- **`Eliminar(id)`**: `DELETE ... WHERE Id = @id`. Regresa `true` si borró al menos una fila.
-- **`LeerProducto(lector)`**: convierte la fila actual del `DataReader` en un objeto `Producto`. Revisa con `IsDBNull` si la descripción viene vacía.
-- **`AgregarParametros(comando, producto)`**: agrega los parámetros comunes del INSERT y del UPDATE.
+### Otras cosas importantes
+
+- Uso **parámetros SQL** (`@id`, `@nombre`) para evitar la inyección SQL.
+- Uso **using** para que la conexión se cierre sola al terminar.
+- Uso **try/catch** para que, si falla la base de datos, la API responda con un mensaje de error en lugar de tronar.
